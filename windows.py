@@ -272,9 +272,8 @@ def _show_info(text: str, title: str = "TG WS Proxy"):
 
 
 def _on_open_in_telegram(icon=None, item=None):
-    host = _config.get("host", DEFAULT_CONFIG["host"])
     port = _config.get("port", DEFAULT_CONFIG["port"])
-    url = f"tg://socks?server={host}&port={port}"
+    url = f"tg://socks?server=127.0.0.1&port={port}"
     log.info("Opening %s", url)
     try:
         result = webbrowser.open(url)
