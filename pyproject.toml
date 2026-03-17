@@ -53,6 +53,7 @@ win10 = [
 
 [project.scripts]
 tg-ws-proxy = "proxy.tg_ws_proxy:main"
+tg-ws-proxy-tray = "windows:main"
 
 [project.urls]
 Source = "https://github.com/Flowseal/tg-ws-proxy"
@@ -60,6 +61,9 @@ Issues = "https://github.com/Flowseal/tg-ws-proxy/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["proxy"]
+
+[tool.hatch.build.force-include]
+"windows.py" = "windows.py"
 
 [tool.hatch.version]
 source = "vcs"
