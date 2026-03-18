@@ -65,19 +65,14 @@ macos = [
 
 [project.scripts]
 tg-ws-proxy = "proxy.tg_ws_proxy:main"
-tg-ws-proxy-tray-win = "windows:main"
-tg-ws-proxy-tray-macos = "macos:main"
+tg-ws-proxy-tray = "tg_ws_proxy.cli:main"
 
 [project.urls]
 Source = "https://github.com/Flowseal/tg-ws-proxy"
 Issues = "https://github.com/Flowseal/tg-ws-proxy/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["proxy"]
-
-[tool.hatch.build.force-include]
-"windows.py" = "windows.py"
-"macos.py" = "macos.py"
+packages = ["src/tg_ws_proxy"]
 
 [tool.hatch.version]
-path = "proxy/__init__.py"
+path = "src/tg_ws_proxy/__init__.py"

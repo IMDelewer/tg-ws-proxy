@@ -28,7 +28,7 @@ try:
 except ImportError:
     pyperclip = None
 
-import proxy.tg_ws_proxy as tg_ws_proxy
+from tg_ws_proxy.core import proxy as tg_ws_proxy
 
 APP_NAME = "TgWsProxy"
 APP_DIR = Path.home() / "Library" / "Application Support" / APP_NAME

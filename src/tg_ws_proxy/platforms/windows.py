@@ -18,7 +18,7 @@ import pystray
 import customtkinter as ctk
 from PIL import Image, ImageDraw, ImageFont
 
-import proxy.tg_ws_proxy as tg_ws_proxy
+from tg_ws_proxy.core import proxy as tg_ws_proxy
 
 
 APP_NAME = "TgWsProxy"
