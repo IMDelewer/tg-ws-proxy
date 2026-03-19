@@ -92,7 +92,7 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies (Win7 x86)
-        run: pip install ".[win7]"
+        run: pip install .
 
       - name: Install PyInstaller (Win7 x86)
         run: pip install "pyinstaller==5.13.2"
