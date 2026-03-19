@@ -348,7 +348,7 @@ jobs:
             dist/TgWsProxy_linux_amd64.deb
 
   release:
-    needs: [build, build-win7, build-macos, build-linux]
+    needs: [build, build-win7, build-win7-32bit,build-macos, build-linux]
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.make_release == 'true' }}
     steps:
