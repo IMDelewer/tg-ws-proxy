@@ -30,6 +30,8 @@ except ImportError:
 
 import proxy.tg_ws_proxy as tg_ws_proxy
 
+IS_FROZEN = bool(getattr(sys, "frozen", False))
+
 APP_NAME = "TgWsProxy"
 APP_DIR = Path.home() / "Library" / "Application Support" / APP_NAME
 CONFIG_FILE = APP_DIR / "config.json"
@@ -43,6 +45,7 @@ DEFAULT_CONFIG = {
     "host": "127.0.0.1",
     "dc_ip": ["2:149.154.167.220", "4:149.154.167.220"],
     "verbose": False,
+    "autostart": False,
 }
 
 _proxy_thread: Optional[threading.Thread] = None
@@ -172,6 +175,62 @@ def setup_logging(verbose: bool = False):
             "%(asctime)s  %(levelname)-5s  %(message)s",
             datefmt="%H:%M:%S"))
         root.addHandler(ch)
+
+
+def _launch_agents_dir() -> Path:
+    return Path.home() / "Library" / "LaunchAgents"
+
+
+def _autostart_plist_path() -> Path:
+    return _launch_agents_dir() / f"{APP_NAME}.plist"
+
+
+def _autostart_plist_content() -> str:
+    exec_path = sys.executable
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{APP_NAME}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{exec_path}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>
+"""
+
+
+def _supports_autostart() -> bool:
+    return IS_FROZEN
+
+
+def is_autostart_enabled() -> bool:
+    plist_path = _autostart_plist_path()
+    if not plist_path.exists():
+        return False
+
+    try:
+        content = plist_path.read_text(encoding="utf-8")
+        exec_path = sys.executable
+        return f"<string>{exec_path}</string>" in content
+    except Exception:
+        return False
+
+
+def set_autostart_enabled(enabled: bool) -> None:
+    plist_path = _autostart_plist_path()
+
+    if enabled:
+        _launch_agents_dir().mkdir(parents=True, exist_ok=True)
+        plist_path.write_text(_autostart_plist_content(), encoding="utf-8")
+    else:
+        plist_path.unlink(missing_ok=True)
 
 
 # Menubar icon
@@ -438,14 +497,23 @@ def _edit_config_dialog():
     # Verbose
     verbose = _ask_yes_no("Включить подробное логирование (verbose)?")
 
+    # Autostart
+    autostart = False
+    if _supports_autostart():
+        autostart = _ask_yes_no("Включить автозапуск при входе в систему?")
+
     new_cfg = {
         "host": host,
         "port": port,
         "dc_ip": dc_lines,
         "verbose": verbose,
+        "autostart": autostart,
     }
     save_config(new_cfg)
     log.info("Config saved: %s", new_cfg)
+
+    if _supports_autostart():
+        set_autostart_enabled(autostart)
 
     global _config
     _config = new_cfg
