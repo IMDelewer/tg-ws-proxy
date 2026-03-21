@@ -19,6 +19,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 import proxy.tg_ws_proxy as tg_ws_proxy
 
+IS_FROZEN = bool(getattr(sys, "frozen", False))
+
 APP_NAME = "TgWsProxy"
 APP_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / APP_NAME
 CONFIG_FILE = APP_DIR / "config.json"
@@ -32,6 +34,7 @@ DEFAULT_CONFIG = {
     "host": "127.0.0.1",
     "dc_ip": ["2:149.154.167.220", "4:149.154.167.220"],
     "verbose": False,
+    "autostart": False,
 }
 
 
@@ -173,6 +176,48 @@ def setup_logging(verbose: bool = False):
             )
         )
         root.addHandler(ch)
+
+
+def _autostart_desktop_file_path() -> Path:
+    autostart_dir = Path.home() / ".config" / "autostart"
+    return autostart_dir / f"{APP_NAME}.desktop"
+
+
+def _autostart_desktop_entry() -> str:
+    exec_path = sys.executable
+    return f"""[Desktop Entry]
+Type=Application
+Name={APP_NAME}
+Exec={exec_path}
+X-GNOME-Autostart-enabled=true
+"""
+
+
+def _supports_autostart() -> bool:
+    return IS_FROZEN
+
+
+def is_autostart_enabled() -> bool:
+    desktop_file = _autostart_desktop_file_path()
+    if not desktop_file.exists():
+        return False
+
+    try:
+        content = desktop_file.read_text(encoding="utf-8")
+        exec_path = sys.executable
+        return f"Exec={exec_path}" in content
+    except Exception:
+        return False
+
+
+def set_autostart_enabled(enabled: bool) -> None:
+    desktop_file = _autostart_desktop_file_path()
+
+    if enabled:
+        desktop_file.parent.mkdir(parents=True, exist_ok=True)
+        desktop_file.write_text(_autostart_desktop_entry(), encoding="utf-8")
+    else:
+        desktop_file.unlink(missing_ok=True)
 
 
 def _make_icon_image(size: int = 64):
@@ -338,6 +383,7 @@ def _edit_config_dialog():
         return
 
     cfg = dict(_config)
+    cfg["autostart"] = is_autostart_enabled()
 
     ctk.set_appearance_mode("light")
     ctk.set_default_color_theme("blue")
@@ -364,6 +410,8 @@ def _edit_config_dialog():
     FONT_FAMILY = "Sans"
 
     w, h = 420, 480
+    if _supports_autostart():
+        h += 70
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
@@ -455,6 +503,29 @@ def _edit_config_dialog():
         border_color=FIELD_BORDER,
     ).pack(anchor="w", pady=(0, 8))
 
+    autostart_var = None
+    if _supports_autostart():
+        autostart_var = ctk.BooleanVar(value=cfg["autostart"])
+        ctk.CTkCheckBox(
+            frame,
+            text="Автозапуск при входе в систему",
+            variable=autostart_var,
+            font=(FONT_FAMILY, 13),
+            text_color=TEXT_PRIMARY,
+            fg_color=TG_BLUE,
+            hover_color=TG_BLUE_HOVER,
+            corner_radius=6,
+            border_width=2,
+            border_color=FIELD_BORDER,
+        ).pack(anchor="w", pady=(0, 8))
+        ctk.CTkLabel(
+            frame,
+            text="При перемещении файла или запуске из другой папки\nавтозапуск будет сброшен",
+            font=(FONT_FAMILY, 11),
+            text_color=TEXT_SECONDARY,
+            anchor="w",
+        ).pack(anchor="w", pady=(0, 8))
+
     # Info label
     ctk.CTkLabel(
         frame,
@@ -498,10 +569,14 @@ def _edit_config_dialog():
             "port": port_val,
             "dc_ip": lines,
             "verbose": verbose_var.get(),
+            "autostart": (autostart_var.get() if autostart_var is not None else False),
         }
         save_config(new_cfg)
         _config.update(new_cfg)
         log.info("Config saved: %s", new_cfg)
+
+        if _supports_autostart():
+            set_autostart_enabled(bool(new_cfg.get("autostart", False)))
 
         _tray_icon.menu = _build_menu()
 
