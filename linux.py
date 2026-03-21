@@ -178,18 +178,51 @@ def setup_logging(verbose: bool = False):
         root.addHandler(ch)
 
 
+_DESKTOP_MAP = {
+    "gnome": "gnome", "gnome-xorg": "gnome", "gnome-wayland": "gnome",
+    "kde": "kde", "plasma": "kde", "kde-plasma": "kde",
+    "xfce": "xfce", "xfce4": "xfce",
+    "cinnamon": "cinnamon", "cinnamon-wayland": "cinnamon",
+    "mate": "mate", "lxde": "lxde", "lxqt": "lxde",
+    "budgie": "budgie", "pantheon": "pantheon", "elementary": "pantheon",
+    "unity": "unity",
+    "sway": "sway", "hyprland": "hyprland", "weston": "weston",
+}
+
+
+def _detect_desktop_environment() -> str:
+    desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
+    session = os.environ.get("DESKTOP_SESSION", "").lower()
+    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+
+    if desktop in _DESKTOP_MAP:
+        return _DESKTOP_MAP[desktop]
+
+    for key, val in _DESKTOP_MAP.items():
+        if key in session:
+            return val
+
+    return "wayland" if "wayland" in session_type else \
+           "x11" if "x11" in session_type or "xorg" in session else "unknown"
+
+
 def _autostart_desktop_file_path() -> Path:
-    autostart_dir = Path.home() / ".config" / "autostart"
-    return autostart_dir / f"{APP_NAME}.desktop"
+    return Path.home() / ".config" / "autostart" / f"{APP_NAME}.desktop"
 
 
 def _autostart_desktop_entry() -> str:
-    exec_path = sys.executable
     return f"""[Desktop Entry]
 Type=Application
 Name={APP_NAME}
-Exec={exec_path}
+Comment=Telegram WebSocket Proxy
+Exec={sys.executable}
+Icon=network-server
+Terminal=false
+Categories=Network;Proxy;
+StartupNotify=true
 X-GNOME-Autostart-enabled=true
+X-MATE-Autostart-enabled=true
+X-LXDE-Autostart-enabled=true
 """
 
 
@@ -197,27 +230,60 @@ def _supports_autostart() -> bool:
     return IS_FROZEN
 
 
+def _run_cmd(cmd: list, check: bool = True) -> bool:
+    try:
+        return subprocess.run(cmd, capture_output=True,
+                             text=True).returncode == 0
+    except FileNotFoundError:
+        return not check
+
+
+def _set_xfce_autostart(enabled: bool) -> None:
+    desktop_file = _autostart_desktop_file_path()
+    if enabled:
+        desktop_file.parent.mkdir(parents=True, exist_ok=True)
+        desktop_file.write_text(_autostart_desktop_entry(), encoding="utf-8")
+        _run_cmd(["xfconf-query", "-c", "xfce4-session", "-p",
+                  "/xfce4-session/autostart/TgWsProxy", "-s", str(desktop_file)],
+                 check=False)
+    else:
+        desktop_file.unlink(missing_ok=True)
+        _run_cmd(["xfconf-query", "-c", "xfce4-session", "-p",
+                  "/xfce4-session/autostart/TgWsProxy", "-r"], check=False)
+
+
 def is_autostart_enabled() -> bool:
     desktop_file = _autostart_desktop_file_path()
-    if not desktop_file.exists():
-        return False
-
-    try:
-        content = desktop_file.read_text(encoding="utf-8")
-        exec_path = sys.executable
-        return f"Exec={exec_path}" in content
-    except Exception:
-        return False
+    if desktop_file.exists():
+        try:
+            return sys.executable in desktop_file.read_text(encoding="utf-8")
+        except Exception:
+            pass
+    return False
 
 
 def set_autostart_enabled(enabled: bool) -> None:
+    desktop = _detect_desktop_environment()
+    log.info("Setting autostart for desktop environment: %s", desktop)
+
     desktop_file = _autostart_desktop_file_path()
+
+    if desktop == "xfce":
+        _set_xfce_autostart(enabled)
+        return
 
     if enabled:
         desktop_file.parent.mkdir(parents=True, exist_ok=True)
         desktop_file.write_text(_autostart_desktop_entry(), encoding="utf-8")
+        if desktop == "gnome":
+            _run_cmd(["gsettings", "set", "org.gnome.startup", "enabled", "true"], check=False)
+        elif desktop == "kde":
+            _run_cmd(["kwriteconfig5", "--file", "autostart", "--group", APP_NAME,
+                      "--key", "X-KDE-substituteUid", "true"], check=False)
     else:
         desktop_file.unlink(missing_ok=True)
+        if desktop == "gnome":
+            _run_cmd(["gsettings", "set", "org.gnome.startup", "enabled", "false"], check=False)
 
 
 def _make_icon_image(size: int = 64):
