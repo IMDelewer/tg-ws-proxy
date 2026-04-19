@@ -387,12 +387,12 @@ jobs:
             ## 
             ### [❤️ Поддержать развитие проекта](https://github.com/Flowseal/tg-ws-proxy/blob/main/docs/Funding.md)
           files: |
-            dist/TgWsProxy_windows.exe
-            dist/TgWsProxy_windows_7_64bit.exe
-            dist/TgWsProxy_windows_7_32bit.exe
-            dist/TgWsProxy_macos_universal.dmg
-            dist/TgWsProxy_linux_amd64
-            dist/TgWsProxy_linux_amd64.deb
+            dist/TgWsProxy_win10_${{ github.event.inputs.version }}.exe
+            dist/TgWsProxy_win7_x64_${{ github.event.inputs.version }}.exe
+            dist/TgWsProxy_win7_x32_${{ github.event.inputs.version }}.exe
+            dist/TgWsProxy_macos_universal_${{ github.event.inputs.version }}.dmg
+            dist/TgWsProxy_linux_amd64_${{ github.event.inputs.version }}
+            dist/TgWsProxy_linux_amd64_${{ github.event.inputs.version }}.deb
           draft: false
           prerelease: false
         env:
