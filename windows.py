@@ -333,7 +333,7 @@ def _maybe_do_update(cfg: dict, is_exiting) -> None:
                 return
             url = (st.get("html_url") or "").strip() or RELEASES_PAGE_URL
             ver = st.get("latest") or "?"
-            asset = get_update_asset(Path(sys.executable)) if IS_FROZEN else None
+            asset = get_update_asset(Path(sys.executable), __version__) if IS_FROZEN else None
             choice = update_ctk_form(
                 f"Доступна новая версия: {ver}",
                 download_url=asset[0] if asset else None,
