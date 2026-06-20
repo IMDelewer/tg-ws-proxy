@@ -18,6 +18,8 @@ _st_BBQ4s = struct.Struct('>BBQ4s')
 _st_H = struct.Struct('>H')
 _st_Q = struct.Struct('>Q')
 
+MAX_WS_FRAME_SIZE = 16 * 1024 * 1024
+
 _ssl_ctx = ssl.create_default_context()
 _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -80,30 +82,31 @@ class RawWebSocket:
     @staticmethod
     async def connect(host: str, domain: str, timeout: float = 10.0,
                       path: str = '/apiws') -> 'RawWebSocket':
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(host, 443, ssl=_ssl_ctx,
-                                    server_hostname=domain),
-            timeout=min(timeout, 10))
-        
-        set_sock_opts(writer.transport, proxy_config.buffer_size)
-
-        ws_key = base64.b64encode(os.urandom(16)).decode()
-
-        req = (
-            f'GET {path} HTTP/1.1\r\n'
-            f'Host: {domain}\r\n'
-            f'Upgrade: websocket\r\n'
-            f'Connection: Upgrade\r\n'
-            f'Sec-WebSocket-Key: {ws_key}\r\n'
-            f'Sec-WebSocket-Version: 13\r\n'
-            f'Sec-WebSocket-Protocol: binary\r\n'
-            f'\r\n'
-        )
-        writer.write(req.encode())
-        await writer.drain()
-
-        response_lines: list[str] = []
+        writer = None
         try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, 443, ssl=_ssl_ctx,
+                                        server_hostname=domain),
+                timeout=min(timeout, 10))
+
+            set_sock_opts(writer.transport, proxy_config.buffer_size)
+
+            ws_key = base64.b64encode(os.urandom(16)).decode()
+
+            req = (
+                f'GET {path} HTTP/1.1\r\n'
+                f'Host: {domain}\r\n'
+                f'Upgrade: websocket\r\n'
+                f'Connection: Upgrade\r\n'
+                f'Sec-WebSocket-Key: {ws_key}\r\n'
+                f'Sec-WebSocket-Version: 13\r\n'
+                f'Sec-WebSocket-Protocol: binary\r\n'
+                f'\r\n'
+            )
+            writer.write(req.encode())
+            await writer.drain()
+
+            response_lines: list[str] = []
             while True:
                 line = await asyncio.wait_for(reader.readline(),
                                               timeout=timeout)
@@ -111,33 +114,36 @@ class RawWebSocket:
                     break
                 response_lines.append(
                     line.decode('utf-8', errors='replace').strip())
-        except asyncio.TimeoutError:
-            writer.close()
+
+            if not response_lines:
+                raise WsHandshakeError(0, 'empty response')
+
+            first_line = response_lines[0]
+            parts = first_line.split(' ', 2)
+            try:
+                status_code = int(parts[1]) if len(parts) >= 2 else 0
+            except ValueError:
+                status_code = 0
+
+            if status_code == 101:
+                return RawWebSocket(reader, writer)
+
+            headers: dict[str, str] = {}
+            for hl in response_lines[1:]:
+                if ':' in hl:
+                    k, v = hl.split(':', 1)
+                    headers[k.strip().lower()] = v.strip()
+
+            raise WsHandshakeError(status_code, first_line, headers,
+                                    location=headers.get('location'))
+        except BaseException:
+            if writer is not None:
+                writer.close()
+                try:
+                    await asyncio.wait_for(writer.wait_closed(), timeout=1.0)
+                except BaseException:
+                    pass
             raise
-
-        if not response_lines:
-            writer.close()
-            raise WsHandshakeError(0, 'empty response')
-
-        first_line = response_lines[0]
-        parts = first_line.split(' ', 2)
-        try:
-            status_code = int(parts[1]) if len(parts) >= 2 else 0
-        except ValueError:
-            status_code = 0
-
-        if status_code == 101:
-            return RawWebSocket(reader, writer)
-
-        headers: dict[str, str] = {}
-        for hl in response_lines[1:]:
-            if ':' in hl:
-                k, v = hl.split(':', 1)
-                headers[k.strip().lower()] = v.strip()
-
-        writer.close()
-        raise WsHandshakeError(status_code, first_line, headers,
-                                location=headers.get('location'))
 
     async def send(self, data: bytes):
         if self._closed:
@@ -236,6 +242,11 @@ class RawWebSocket:
             length = _st_H.unpack(await self.reader.readexactly(2))[0]
         elif length == 127:
             length = _st_Q.unpack(await self.reader.readexactly(8))[0]
+        if length > MAX_WS_FRAME_SIZE:
+            raise ConnectionError(
+                f"WebSocket frame too large: {length} bytes "
+                f"(limit {MAX_WS_FRAME_SIZE})"
+            )
         if hdr[1] & 0x80:
             mask_key = await self.reader.readexactly(4)
             payload = await self.reader.readexactly(length)

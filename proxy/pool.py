@@ -105,9 +105,19 @@ class _WsPool:
                 self._schedule_refill((dc, is_media), target_ip, domains)
         log.info("WS pool warmup started for %d DC(s)", len(proxy_config.dc_redirects))
 
-    def reset(self):
+    async def reset(self):
+        sockets = [
+            ws
+            for bucket in self._idle.values()
+            for ws, _created in bucket
+        ]
         self._idle.clear()
         self._refilling.clear()
+        if sockets:
+            await asyncio.gather(
+                *(self._quiet_close(ws) for ws in sockets),
+                return_exceptions=True,
+            )
 
 
 class _CfWorkerPool:
@@ -205,9 +215,19 @@ class _CfWorkerPool:
 
         log.info("CF worker pool warmup started for %d DC(s)", len(cf_fallbacks))
 
-    def reset(self):
+    async def reset(self):
+        sockets = [
+            ws
+            for bucket in self._idle.values()
+            for ws, _created in bucket
+        ]
         self._idle.clear()
         self._refilling.clear()
+        if sockets:
+            await asyncio.gather(
+                *(self._quiet_close(ws) for ws in sockets),
+                return_exceptions=True,
+            )
 
 
 ws_pool = _WsPool()

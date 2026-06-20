@@ -19,6 +19,7 @@ log = logging.getLogger('tg-mtproto-proxy')
 _st_I_le = struct.Struct('<I')
 
 ZERO_64 = b'\x00' * 64
+MAX_MTPROTO_PACKET_SIZE = 16 * 1024 * 1024
 
 
 class CryptoCtx:
@@ -113,6 +114,7 @@ class MsgSplitter:
         if payload_len <= 0:
             return 0
         packet_len = header_len + payload_len
+        self._validate_packet_len(packet_len)
         if avail < packet_len:
             return None
         return packet_len
@@ -124,9 +126,18 @@ class MsgSplitter:
         if payload_len <= 0:
             return 0
         packet_len = 4 + payload_len
+        self._validate_packet_len(packet_len)
         if avail < packet_len:
             return None
         return packet_len
+
+    @staticmethod
+    def _validate_packet_len(packet_len: int) -> None:
+        if packet_len > MAX_MTPROTO_PACKET_SIZE:
+            raise ValueError(
+                f"MTProto packet too large: {packet_len} bytes "
+                f"(limit {MAX_MTPROTO_PACKET_SIZE})"
+            )
 
 
 async def do_fallback(reader, writer, relay_init, label,

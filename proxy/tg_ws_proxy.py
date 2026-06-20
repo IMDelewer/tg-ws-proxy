@@ -432,8 +432,8 @@ async def _run(stop_event: Optional[asyncio.Event] = None):
     global _server_instance, _server_stop_event
     _server_stop_event = stop_event
 
-    ws_pool.reset()
-    cf_worker_pool.reset()
+    await ws_pool.reset()
+    await cf_worker_pool.reset()
     ws_blacklist.clear()
     dc_fail_until.clear()
     _client_tasks.clear()
